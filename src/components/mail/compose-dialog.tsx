@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useSendEvmTransaction, useEvmAddress, useIsSignedIn } from '@coinbase/cdp-hooks';
+import { useSendUserOperation, useCurrentUser, useIsSignedIn } from '@coinbase/cdp-hooks';
 import { encodeFunctionData } from 'viem';
 import {
   Dialog,
@@ -51,8 +51,8 @@ export function ComposeDialog({
   const { toast } = useToast();
   const { user } = useAuth();
   const { saveDraft } = useMail();
-  const { sendEvmTransaction } = useSendEvmTransaction();
-  const { evmAddress } = useEvmAddress();
+  const { sendUserOperation } = useSendUserOperation();
+  const { currentUser } = useCurrentUser();
   const { isSignedIn } = useIsSignedIn();
 
   const isPlatformRecipient = to.length > 0 && to.split(',').every(email => email.trim().endsWith('@dexmail.app'));
@@ -130,24 +130,39 @@ export function ComposeDialog({
 
       // Create transaction callback for embedded wallets
       const sendTx = async (args: { to: string; data: string; value?: bigint }) => {
-        const result = await sendEvmTransaction({
-          transaction: {
+        const smartAccount = currentUser?.evmSmartAccounts?.[0];
+        if (!smartAccount) {
+          throw new Error('Smart account not found');
+        }
+
+        const result = await sendUserOperation({
+          evmSmartAccount: smartAccount,
+          network: "base-sepolia",
+          calls: [{
             to: args.to as `0x${string}`,
             data: args.data as `0x${string}`,
-            chainId: 84532, // Base Sepolia
-            type: "eip1559",
-            value: args.value
-          },
-          evmAccount: evmAddress as `0x${string}`,
-          network: "base-sepolia"
+            value: args.value ?? BigInt(0),
+          }],
+          useCdpPaymaster: true  // Enable gasless transactions
         });
-        return result.transactionHash;
+        // SendUserOperationResult returns userOperationHash, not transactionHash
+        return result.userOperationHash;
       };
+
+      // Normalize recipient emails: lowercase @dexmail.app addresses
+      const normalizedRecipients = to.split(',').map(email => {
+        const trimmed = email.trim();
+        // Auto-lowercase @dexmail.app addresses
+        if (trimmed.toLowerCase().endsWith('@dexmail.app')) {
+          return trimmed.toLowerCase();
+        }
+        return trimmed;
+      });
 
       const result = await mailService.sendEmail(
         {
           from: user.email, // Use authenticated user's email
-          to: to.split(',').map(e => e.trim()),
+          to: normalizedRecipients,
           subject,
           body,
           cryptoTransfer: cryptoEnabled ? {

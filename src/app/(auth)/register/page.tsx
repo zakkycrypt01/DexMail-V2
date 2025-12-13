@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEvmAddress, useIsSignedIn, useSignInWithEmail, useVerifyEmailOTP, useSignOut, useSendEvmTransaction } from "@coinbase/cdp-hooks";
+import { useEvmAddress, useIsSignedIn, useSignInWithEmail, useVerifyEmailOTP, useSignOut, useSendUserOperation, useCurrentUser } from "@coinbase/cdp-hooks";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -34,7 +34,8 @@ export default function RegisterPage() {
   const { isSignedIn } = useIsSignedIn();
   const { evmAddress } = useEvmAddress();
   const { signOut } = useSignOut();
-  const { sendEvmTransaction } = useSendEvmTransaction();
+  const { sendUserOperation } = useSendUserOperation();
+  const { currentUser } = useCurrentUser();
   const {
     address,
     isConnected,
@@ -277,20 +278,25 @@ export default function RegisterPage() {
         args: [constructedEmail]
       });
 
-      // Send transaction using CDP's sendEvmTransaction
+      // Send transaction using CDP's sendUserOperation with smart account
       const sendTransaction = async () => {
-        const result = await sendEvmTransaction({
-          transaction: {
+        const smartAccount = currentUser?.evmSmartAccounts?.[0];
+        if (!smartAccount) {
+          throw new Error('Smart account not found');
+        }
+
+        const result = await sendUserOperation({
+          evmSmartAccount: smartAccount,
+          network: "base-sepolia",
+          calls: [{
             to: BASEMAILER_ADDRESS,
             data: data as `0x${string}`,
-            chainId: 84532, // Base Sepolia
-            type: "eip1559",
-          },
-          evmAccount: evmAddress,
-          network: "base-sepolia",
+            value: BigInt(0),
+          }],
+          useCdpPaymaster: true  // Enable gasless registration
         });
 
-        return result.transactionHash;
+        return result.userOperationHash;
       };
 
       // Use the new registerWithEmbeddedWallet method from authService

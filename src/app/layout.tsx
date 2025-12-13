@@ -40,7 +40,7 @@ export default function RootLayout({
           config={{
             projectId,
             appName: 'DexMail',
-            ethereum: { createOnLogin: 'eoa' },
+            ethereum: { createOnLogin: 'smart' },
           }}
         >
           <RainbowProviders>
