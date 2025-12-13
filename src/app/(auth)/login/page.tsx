@@ -14,14 +14,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { authService } from "@/lib/auth-service";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import { useEvmAddress, useIsSignedIn, useSignInWithEmail, useVerifyEmailOTP, useSignOut } from "@coinbase/cdp-hooks";
 
 export default function LoginPage() {
@@ -75,9 +68,7 @@ export default function LoginPage() {
     autoSignOut();
   }, []); // Run once on mount
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogTitle, setDialogTitle] = useState('');
-  const [dialogDescription, setDialogDescription] = useState('');
+
 
   const handleWalletConnect = async () => {
     try {
@@ -188,12 +179,9 @@ export default function LoginPage() {
       const result = await signInWithEmail({ email: embeddedEmail.trim() });
       setOtpFlowId(result.flowId);
       setIsOtpSent(true);
-      setDialogTitle('OTP Sent');
-      setDialogDescription('Check your email for the 6-digit code to continue.');
-      setDialogOpen(true);
       toast({
-        title: "Check your email",
-        description: "We sent a 6-digit code to continue.",
+        title: "OTP Sent",
+        description: "Check your email for the 6-digit code to continue.",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to send OTP';
@@ -224,9 +212,6 @@ export default function LoginPage() {
       // Set flag - useEffect will handle login when CDP session is ready
       setIsOtpVerified(true);
 
-      setDialogTitle('Email Verified');
-      setDialogDescription('Setting up your wallet session...');
-      setDialogOpen(true);
       toast({
         title: "Verified",
         description: "Setting up your session...",
@@ -253,7 +238,6 @@ export default function LoginPage() {
         console.log('[Login] CDP session ready! Auto-triggering login');
         console.log('[Login] evmAddress:', evmAddress);
 
-        setDialogDescription('Signing you in...');
 
         try {
           await handleEmbeddedWalletLogin(evmAddress);
@@ -323,9 +307,7 @@ export default function LoginPage() {
       }
 
       setEmbeddedComplete(true);
-      setDialogTitle('Login Successful');
-      setDialogDescription('Welcome back to DexMail! Redirecting you to your inbox.');
-      setDialogOpen(true);
+
       toast({
         title: "Login successful",
         description: "Welcome back to DexMail!",
@@ -371,9 +353,6 @@ export default function LoginPage() {
       await login(embeddedEmail, evmAddress, evmAddress, 'wallet');
       console.log('[Login] Login successful');
       setEmbeddedComplete(true);
-      setDialogTitle('Login Successful');
-      setDialogDescription('Welcome back to DexMail! Redirecting you to your inbox.');
-      setDialogOpen(true);
       toast({
         title: "Login successful",
         description: "Welcome back to DexMail!",
@@ -397,21 +376,7 @@ export default function LoginPage() {
 
   return (
     <div className="text-center space-y-8">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            {dialogDescription && (
-              <DialogDescription>{dialogDescription}</DialogDescription>
-            )}
-          </DialogHeader>
-          <DialogFooter>
-            <Button className="w-full" onClick={() => setDialogOpen(false)}>
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Illustration */}
       <div className="relative h-64 w-full">
@@ -472,40 +437,42 @@ export default function LoginPage() {
               {!isSignedIn ? (
                 // Step 1: Email input and OTP sending
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="embedded-email" className="text-slate-700 font-medium">
-                      Email for Coinbase sign-in
-                    </Label>
-                    <Input
-                      id="embedded-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      className="h-12 bg-white border-slate-200 rounded-xl focus:border-slate-400 focus:ring-slate-400 text-slate-900 placeholder:text-slate-500"
-                      value={embeddedEmail}
-                      onChange={(e) => {
-                        setEmbeddedEmail(e.target.value);
-                        if (error === 'Please enter your email to receive a code') {
-                          setError('');
-                        }
-                      }}
-                      disabled={isOtpSent}
-                      required
-                    />
-                    <Button
-                      onClick={handleSendOtp}
-                      disabled={isSendingOtp || isOtpSent || !embeddedEmail.trim()}
-                      className="w-full h-11 bg-brand-blue hover:bg-brand-blue-hover text-white font-semibold rounded-full"
-                    >
-                      {isSendingOtp ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Sending code...
-                        </>
-                      ) : (
-                        'Send OTP'
-                      )}
-                    </Button>
-                  </div>
+                  {/* Step 1: Email input - hide when OTP is sent */}
+                  {!isOtpSent && (
+                    <div className="space-y-2">
+                      <Label htmlFor="embedded-email" className="text-slate-700 font-medium">
+                        Email for Coinbase sign-in
+                      </Label>
+                      <Input
+                        id="embedded-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        className="h-12 bg-white border-slate-200 rounded-xl focus:border-slate-400 focus:ring-slate-400 text-slate-900 placeholder:text-slate-500"
+                        value={embeddedEmail}
+                        onChange={(e) => {
+                          setEmbeddedEmail(e.target.value);
+                          if (error === 'Please enter your email to receive a code') {
+                            setError('');
+                          }
+                        }}
+                        required
+                      />
+                      <Button
+                        onClick={handleSendOtp}
+                        disabled={isSendingOtp || !embeddedEmail.trim()}
+                        className="w-full h-11 bg-brand-blue hover:bg-brand-blue-hover text-white font-semibold rounded-full"
+                      >
+                        {isSendingOtp ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending code...
+                          </>
+                        ) : (
+                          'Send OTP'
+                        )}
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Step 2: OTP verification */}
                   {isOtpSent && !isSignedIn && (
@@ -707,6 +674,6 @@ export default function LoginPage() {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }

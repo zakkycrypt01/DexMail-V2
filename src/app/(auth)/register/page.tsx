@@ -16,12 +16,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { authService } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+
 } from "@/components/ui/dialog";
 import { useEvmAddress, useIsSignedIn, useSignInWithEmail, useVerifyEmailOTP, useSignOut, useSendUserOperation, useCurrentUser } from "@coinbase/cdp-hooks";
 
@@ -67,9 +62,7 @@ export default function RegisterPage() {
   const [generatedEmail, setGeneratedEmail] = useState('');
   const [authComplete, setAuthComplete] = useState(false);
   const [error, setError] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogTitle, setDialogTitle] = useState('');
-  const [dialogDescription, setDialogDescription] = useState('');
+
 
   const handleWalletConnect = async () => {
     try {
@@ -192,9 +185,10 @@ export default function RegisterPage() {
       const result = await signInWithEmail({ email: embeddedEmail.trim() });
       setOtpFlowId(result.flowId);
       setIsOtpSent(true);
-      setDialogTitle('OTP Sent');
-      setDialogDescription('Check your email for the 6-digit code to continue.');
-      setDialogOpen(true);
+      toast({
+        title: "OTP Sent",
+        description: "Check your email for the 6-digit code to continue.",
+      });
       toast({
         title: "Check your email",
         description: "We sent a 6-digit code to continue.",
@@ -222,9 +216,10 @@ export default function RegisterPage() {
     try {
       await verifyEmailOTP({ flowId: otpFlowId, otp: otpCode.trim() });
       setIsOtpVerified(true);
-      setDialogTitle('Email Verified');
-      setDialogDescription('Your email is verified. Choose a username to finish.');
-      setDialogOpen(true);
+      toast({
+        title: "Email Verified",
+        description: "Your email is verified. Choose a username to finish.",
+      });
       toast({
         title: "Verified",
         description: "Email verified. Choose a username to finish.",
@@ -293,7 +288,7 @@ export default function RegisterPage() {
             data: data as `0x${string}`,
             value: BigInt(0),
           }],
-          useCdpPaymaster: true  // Enable gasless registration
+          useCdpPaymaster: true
         });
 
         return result.userOperationHash;
@@ -302,9 +297,10 @@ export default function RegisterPage() {
       // Use the new registerWithEmbeddedWallet method from authService
       await authService.registerWithEmbeddedWallet(constructedEmail, evmAddress, sendTransaction);
       setEmbeddedComplete(true);
-      setDialogTitle('Account Created');
-      setDialogDescription('Welcome to DexMail! Redirecting you to your inbox.');
-      setDialogOpen(true);
+      toast({
+        title: "Account Created",
+        description: "Welcome to DexMail! Redirecting you to your inbox.",
+      });
       toast({
         title: "Account created",
         description: "Welcome to DexMail with your embedded wallet!",
@@ -325,21 +321,7 @@ export default function RegisterPage() {
 
   return (
     <div className="text-center space-y-8">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            {dialogDescription && (
-              <DialogDescription>{dialogDescription}</DialogDescription>
-            )}
-          </DialogHeader>
-          <DialogFooter>
-            <Button className="w-full" onClick={() => setDialogOpen(false)}>
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Illustration */}
       <div className="relative h-64 w-full">
@@ -395,46 +377,45 @@ export default function RegisterPage() {
 
         <div className="space-y-4">
           {!useWalletAuth ? (
-            // Coinbase Embedded Wallet (Option B - Custom UI)
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 text-left">
               {!isSignedIn ? (
-                // Step 1: Email input and OTP sending
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="embedded-email" className="text-slate-700 font-medium">
-                      Email for Coinbase sign-in
-                    </Label>
-                    <Input
-                      id="embedded-email"
-                      type="email"
+                  {/* Step 1: Email input - hide when OTP is sent */}
+                  {!isOtpSent && (
+                    <div className="space-y-2">
+                      <Label htmlFor="embedded-email" className="text-slate-700 font-medium">
+                        Email for Coinbase sign-in
+                      </Label>
+                      <Input
+                        id="embedded-email"
+                        type="email"
                       placeholder="you@example.com"
-                      className="h-12 bg-white border-slate-200 rounded-xl focus:border-slate-400 focus:ring-slate-400 text-slate-900 placeholder:text-slate-500"
-                      value={embeddedEmail}
-                      onChange={(e) => {
-                        setEmbeddedEmail(e.target.value);
-                        // Clear error when user starts typing
-                        if (error === 'Please enter your email to receive a code') {
-                          setError('');
-                        }
-                      }}
-                      disabled={isOtpSent}
-                      required
-                    />
-                    <Button
-                      onClick={handleSendOtp}
-                      disabled={isSendingOtp || isOtpSent || !embeddedEmail.trim()}
-                      className="w-full h-11 bg-brand-blue hover:bg-brand-blue-hover text-white font-semibold rounded-full"
-                    >
-                      {isSendingOtp ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Sending code...
-                        </>
-                      ) : (
-                        'Send OTP'
-                      )}
-                    </Button>
-                  </div>
+                        className="h-12 bg-white border-slate-200 rounded-xl focus:border-slate-400 focus:ring-slate-400 text-slate-900 placeholder:text-slate-500"
+                        value={embeddedEmail}
+                        onChange={(e) => {
+                          setEmbeddedEmail(e.target.value);
+                          if (error === 'Please enter your email to receive a code') {
+                            setError('');
+                          }
+                        }}
+                        required
+                      />
+                      <Button
+                        onClick={handleSendOtp}
+                        disabled={isSendingOtp || !embeddedEmail.trim()}
+                        className="w-full h-11 bg-brand-blue hover:bg-brand-blue-hover text-white font-semibold rounded-full"
+                      >
+                        {isSendingOtp ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending code...
+                          </>
+                        ) : (
+                          'Send OTP'
+                        )}
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Step 2: OTP verification (only show if OTP was sent but user not yet signed in) */}
                   {isOtpSent && !isSignedIn && (
