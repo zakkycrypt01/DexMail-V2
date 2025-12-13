@@ -23,9 +23,11 @@ export default function SettingsPage() {
   const { currentUser } = useCurrentUser();
   const eoaAddress = currentUser?.evmAccounts?.[0];
 
-
   // Only show export for embedded wallet users
   const isEmbeddedWallet = user?.authType === 'coinbase-embedded';
+
+  // Use eoaAddress if available, fallback to evmAddress for embedded wallets
+  const walletAddress = isEmbeddedWallet ? (eoaAddress || evmAddress) : null;
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -63,7 +65,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* Only show wallet export for embedded wallet users */}
-        {isEmbeddedWallet && eoaAddress && (
+        {isEmbeddedWallet && walletAddress && (
           <Card>
             <CardHeader>
               <CardTitle>Wallet Security</CardTitle>
@@ -72,14 +74,16 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col gap-1">
                   <Label>Export Private Key</Label>
                   <span className="font-normal text-sm text-muted-foreground">
                     Securely export your wallet's private key. Keep it secret, keep it safe.
                   </span>
                 </div>
-                <ExportWalletModal address={eoaAddress} />
+                <div className="flex-shrink-0">
+                  <ExportWalletModal address={walletAddress} />
+                </div>
               </div>
             </CardContent>
           </Card>

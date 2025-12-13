@@ -42,6 +42,7 @@ import Link from 'next/link';
 import { useMail } from '@/contexts/mail-context';
 import { Tag } from 'lucide-react';
 import { useMailLabels } from '@/hooks/use-mail-labels';
+import { useAccount } from 'wagmi'; // Added this import
 
 interface HeaderProps {
   selectedMailIds: string[];
@@ -155,10 +156,10 @@ import { useAuth } from '@/contexts/auth-context';
 
 function MobileHeader() {
   const { user, logout } = useAuth();
+  const { address: wagmiAddress } = useAccount();
 
-  // Debug logging
-  console.log('[MobileHeader] User from AuthContext:', user);
-  console.log('[MobileHeader] Wallet address:', user?.walletAddress);
+  // Prioritize user.walletAddress for embedded wallets
+  const displayAddress = user?.walletAddress || wagmiAddress;
 
   const userAvatar = PlaceHolderImages.find(
     (img) => img.id === 'user-avatar-1'
@@ -189,8 +190,8 @@ function MobileHeader() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{user?.email || 'User'}</p>
                 <p className="text-xs leading-none text-muted-foreground truncate">
-                  {user?.walletAddress
-                    ? `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`
+                  {displayAddress
+                    ? `${displayAddress.slice(0, 6)}...${displayAddress.slice(-4)}`
                     : 'No wallet connected'}
                 </p>
               </div>
