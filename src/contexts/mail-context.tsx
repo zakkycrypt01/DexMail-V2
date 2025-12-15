@@ -14,6 +14,7 @@ interface MailContextType {
     markAsUnread: (messageId: string) => void;
     moveToSpam: (messageId: string) => void;
     moveToArchive: (messageId: string) => void;
+    removeFromArchive: (messageId: string) => void;
     moveToTrash: (messageId: string) => void;
     restoreFromTrash: (messageId: string) => void;
     addLabel: (messageId: string, label: string) => void;
@@ -93,6 +94,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
                 const timestamp = parseInt(m.timestamp, 10) * 1000;
                 const dateStr = new Date(timestamp).toISOString();
                 const cleanedBody = cleanBody(m.body);
+                const status = mailService.getEmailStatus(m.messageId);
 
                 // For sent: 'from' is the sender (current user), 'to' is the recipient
                 return {
@@ -103,8 +105,10 @@ export function MailProvider({ children }: { children: ReactNode }) {
                     text: cleanedBody.substring(0, 100) + '...',
                     date: dateStr,
                     read: true, // Sent emails are always "read"
-                    labels: [],
-                    status: 'sent',
+                    labels: status.labels || [],
+                    status: status.deleted ? 'trash' :
+                        status.archived ? 'archive' :
+                            status.spam ? 'spam' : 'sent',
                     body: cleanedBody,
                     hasCryptoTransfer: m.hasCryptoTransfer
                 };
@@ -131,7 +135,13 @@ export function MailProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            setMails([...allMails, ...draftMails]);
+            // Combine all emails and deduplicate by ID (keep first occurrence)
+            const combinedMails = [...allMails, ...draftMails];
+            const uniqueMails = combinedMails.filter((mail, index, self) =>
+                index === self.findIndex(m => m.id === mail.id)
+            );
+
+            setMails(uniqueMails);
         } catch (error) {
             console.error('[MailContext] Failed to fetch mails:', error);
             if (!silent) setMails([]);
@@ -157,8 +167,11 @@ export function MailProvider({ children }: { children: ReactNode }) {
 
     // Effect for status changes (silent refresh)
     useEffect(() => {
-        if (statusVersion > 0) {
-            refreshMails(true);
+        if (statusVersion > 0 && user?.email) {
+            // Force reload cache to get latest status from server
+            mailService.initializeStatusCache(user.email, true).then(() => {
+                refreshMails(true);
+            });
         }
     }, [statusVersion]);
 
@@ -197,6 +210,13 @@ export function MailProvider({ children }: { children: ReactNode }) {
     const moveToArchive = (messageId: string) => {
         if (user?.email) {
             mailService.moveToArchive(messageId, user.email);
+            setStatusVersion(v => v + 1);
+        }
+    };
+
+    const removeFromArchive = (messageId: string) => {
+        if (user?.email) {
+            mailService.removeFromArchive(messageId, user.email);
             setStatusVersion(v => v + 1);
         }
     };
@@ -302,6 +322,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
                 markAsUnread,
                 moveToSpam,
                 moveToArchive,
+                removeFromArchive,
                 moveToTrash,
                 restoreFromTrash,
                 addLabel,

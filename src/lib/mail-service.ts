@@ -52,6 +52,11 @@ class MailService {
     authType?: 'wallet' | 'coinbase-embedded',
     sendTransaction?: (args: { to: string; data: string; value?: bigint }) => Promise<string>
   ): Promise<SendEmailResponse & { claimCode?: string; isDirectTransfer?: boolean }> {
+    // Validate crypto transfers only work with single recipient
+    if (data.cryptoTransfer?.enabled && data.cryptoTransfer.assets.length > 0 && data.to.length > 1) {
+      throw new Error('Crypto transfers can only be sent to a single recipient. Please remove additional recipients or disable crypto attachment.');
+    }
+
     let isRecipientRegistered = false;
     let isWalletDeployed = false;
 
@@ -263,81 +268,105 @@ class MailService {
         }
       }
 
+      // Store claim code if applicable
+      if (claimCode && data.cryptoTransfer?.assets) {
+        const recipient = data.to[0];
+        storeClaimCode(
+          claimCode,
+          txHash,
+          recipient,
+          data.from,
+          data.cryptoTransfer.assets,
+          isRecipientRegistered,
+          isDirectTransfer
+        );
+      }
+
     } else if (data.to.length > 0) {
-      // Use appropriate transaction method based on auth type
-      if (authType === 'coinbase-embedded' && sendTransaction) {
-        // Embedded wallet: use CDP transaction
-        const encodedData = encodeFunctionData({
-          abi: baseMailerAbi,
-          functionName: 'indexMail',
-          args: [cid, recipient, "", isExternal, false]
-        });
+      // Bulk send: loop through all recipients
+      console.log(`[MailService] Sending to ${data.to.length} recipient(s)`);
+      const txHashes: string[] = [];
 
-        txHash = await sendTransaction({
-          to: BASEMAILER_ADDRESS,
-          data: encodedData
-        });
-      } else {
-        // External wallet: use wagmi
-        txHash = await writeContract(wagmiConfig, {
-          address: BASEMAILER_ADDRESS,
-          abi: baseMailerAbi,
-          functionName: 'indexMail',
-          args: [cid, recipient, "", isExternal, false]
-        });
-      }
-      console.log('[MailService] Indexed mail on blockchain with tx:', txHash);
-    }
+      for (const recipient of data.to) {
+        const isExternal = recipient.includes('@') && !recipient.endsWith('@dexmail.app');
 
-    if (claimCode && data.cryptoTransfer?.assets) {
-      const recipient = data.to[0];
-      storeClaimCode(
-        claimCode,
-        txHash,
-        recipient,
-        data.from,
-        data.cryptoTransfer.assets,
-        isRecipientRegistered,
-        isDirectTransfer
-      );
-    }
-    if (isExternal) {
-      try {
-        console.log('--------------------------------------------------');
-        console.log('[Bridge] 🌉 EXTERNAL MAIL DETECTED');
-        console.log('[Bridge] 📤 Relaying via SendGrid Bridge...');
-        console.log('[Bridge] 📧 Recipient:', recipient);
-        console.log('[Bridge] 📨 Sender (Reply-To):', data.from);
+        try {
+          let recipientTxHash = '';
 
-        const isDexMail = data.from.toLowerCase().endsWith('@dexmail.app');
-        const fromEmail = isDexMail ? data.from : 'no-reply@dexmail.app';
+          // Use appropriate transaction method based on auth type
+          if (authType === 'coinbase-embedded' && sendTransaction) {
+            // Embedded wallet: use CDP transaction
+            const encodedData = encodeFunctionData({
+              abi: baseMailerAbi,
+              functionName: 'indexMail',
+              args: [cid, recipient, "", isExternal, false]
+            });
 
-        const sendGridResponse = await fetch('/api/sendgrid/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: recipient,
-            from: {
-              email: fromEmail,
-              name: data.from
-            },
-            replyTo: data.from,
-            subject: data.subject,
-            text: emailBody,
-            html: emailBody.replace(/\n/g, '<br/>')
-          })
-        });
+            recipientTxHash = await sendTransaction({
+              to: BASEMAILER_ADDRESS,
+              data: encodedData
+            });
+          } else {
+            // External wallet: use wagmi
+            recipientTxHash = await writeContract(wagmiConfig, {
+              address: BASEMAILER_ADDRESS,
+              abi: baseMailerAbi,
+              functionName: 'indexMail',
+              args: [cid, recipient, "", isExternal, false]
+            });
+          }
 
-        if (sendGridResponse.ok) {
-          console.log('[Bridge] ✅ Successfully relayed via SendGrid');
-          console.log('--------------------------------------------------');
-        } else {
-          console.warn('[Bridge] ❌ Failed to relay via SendGrid:', await sendGridResponse.text());
-          console.log('--------------------------------------------------');
+          console.log(`[MailService] Indexed mail for ${recipient} with tx:`, recipientTxHash);
+          txHashes.push(recipientTxHash);
+
+          // Handle external email relay via SendGrid
+          if (isExternal) {
+            try {
+              console.log('--------------------------------------------------');
+              console.log('[Bridge] 🌉 EXTERNAL MAIL DETECTED');
+              console.log('[Bridge] 📤 Relaying via SendGrid Bridge...');
+              console.log('[Bridge] 📧 Recipient:', recipient);
+              console.log('[Bridge] 📨 Sender (Reply-To):', data.from);
+
+              const isDexMail = data.from.toLowerCase().endsWith('@dexmail.app');
+              const fromEmail = isDexMail ? data.from : 'no-reply@dexmail.app';
+
+              const sendGridResponse = await fetch('/api/sendgrid/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: recipient,
+                  from: {
+                    email: fromEmail,
+                    name: data.from
+                  },
+                  replyTo: data.from,
+                  subject: data.subject,
+                  text: emailBody,
+                  html: emailBody.replace(/\n/g, '<br/>')
+                })
+              });
+
+              if (sendGridResponse.ok) {
+                console.log('[Bridge] ✅ Successfully relayed via SendGrid');
+                console.log('--------------------------------------------------');
+              } else {
+                console.warn('[Bridge] ❌ Failed to relay via SendGrid:', await sendGridResponse.text());
+                console.log('--------------------------------------------------');
+              }
+            } catch (sgError) {
+              console.error(`[MailService] Error sending to ${recipient} via SendGrid:`, sgError);
+            }
+          }
+        } catch (recipientError) {
+          console.error(`[MailService] Failed to send to ${recipient}:`, recipientError);
+          // Continue with other recipients even if one fails
         }
-      } catch (sgError) {
-        console.error('[MailService] Error sending via SendGrid:', sgError);
       }
+
+      // Use the first transaction hash as the primary message ID
+      txHash = txHashes[0] || '';
+      console.log(`[MailService] Bulk send complete. ${txHashes.length}/${data.to.length} successful`);
     }
 
     return {
@@ -686,8 +715,8 @@ class MailService {
   private statusCache: Record<string, EmailStatus> = {};
   private hasInitializedCache = false;
 
-  async initializeStatusCache(address: string): Promise<void> {
-    if (this.hasInitializedCache) return;
+  async initializeStatusCache(address: string, force = false): Promise<void> {
+    if (this.hasInitializedCache && !force) return;
     try {
       const response = await fetch(`/api/email/status?address=${address}`);
       if (response.ok) {

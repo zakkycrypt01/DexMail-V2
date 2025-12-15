@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { mailService } from '@/lib/mail-service';
 import { CryptoAsset } from '@/lib/types';
 import { useMail } from '@/contexts/mail-context';
+import { EmailTagInput } from '@/components/ui/email-tag-input';
 
 export function ComposeDialog({
   children,
@@ -33,14 +34,16 @@ export function ComposeDialog({
   initialData?: { to: string; subject: string; body: string; id?: string };
 }) {
   const [open, setOpen] = useState(false);
-  const [to, setTo] = useState(initialData?.to || '');
+  const [toEmails, setToEmails] = useState<string[]>([]);
   const [subject, setSubject] = useState(initialData?.subject || '');
   const [body, setBody] = useState(initialData?.body || '');
 
   // Update state when initialData changes or dialog opens
   useEffect(() => {
     if (open && initialData) {
-      setTo(initialData.to);
+      // Convert comma-separated string to array if needed
+      const emails = initialData.to ? initialData.to.split(',').map(e => e.trim()).filter(Boolean) : [];
+      setToEmails(emails);
       setSubject(initialData.subject);
       setBody(initialData.body);
     }
@@ -55,7 +58,7 @@ export function ComposeDialog({
   const { currentUser } = useCurrentUser();
   const { isSignedIn } = useIsSignedIn();
 
-  const isPlatformRecipient = to.length > 0 && to.split(',').every(email => email.trim().endsWith('@dexmail.app'));
+  const isPlatformRecipient = toEmails.length > 0 && toEmails.every(email => email.trim().endsWith('@dexmail.app'));
 
   useEffect(() => {
     if (!isPlatformRecipient && cryptoEnabled) {
@@ -67,14 +70,14 @@ export function ComposeDialog({
   // For now, let's just add the save functionality.
 
   const handleSaveDraft = () => {
-    if (!to && !subject && !body) {
+    if (toEmails.length === 0 && !subject && !body) {
       return; // Don't save empty drafts
     }
 
     const draftId = `draft-${Date.now()}`;
     saveDraft({
       id: draftId,
-      to,
+      to: toEmails.join(', '),
       subject,
       body,
       timestamp: Date.now()
@@ -88,7 +91,7 @@ export function ComposeDialog({
   };
 
   const handleSend = async () => {
-    if (!to || !subject || !body) {
+    if (toEmails.length === 0 || !subject || !body) {
       toast({
         title: "Missing fields",
         description: "Please fill in all fields.",
@@ -101,6 +104,24 @@ export function ComposeDialog({
       toast({
         title: "Not authenticated",
         description: "Please log in to send emails.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate crypto transfers only work with single recipient
+    const normalizedRecipients = toEmails.map(email => {
+      const trimmed = email.trim();
+      if (trimmed.toLowerCase().endsWith('@dexmail.app')) {
+        return trimmed.toLowerCase();
+      }
+      return trimmed;
+    });
+
+    if (cryptoEnabled && assets.length > 0 && normalizedRecipients.length > 1) {
+      toast({
+        title: "Crypto Transfer Limitation",
+        description: "Crypto transfers can only be sent to a single recipient. Please remove additional recipients or disable crypto attachment.",
         variant: "destructive",
       });
       return;
@@ -150,14 +171,7 @@ export function ComposeDialog({
       };
 
       // Normalize recipient emails: lowercase @dexmail.app addresses
-      const normalizedRecipients = to.split(',').map(email => {
-        const trimmed = email.trim();
-        // Auto-lowercase @dexmail.app addresses
-        if (trimmed.toLowerCase().endsWith('@dexmail.app')) {
-          return trimmed.toLowerCase();
-        }
-        return trimmed;
-      });
+      // (already normalized above for validation)
 
       const result = await mailService.sendEmail(
         {
@@ -186,7 +200,7 @@ export function ComposeDialog({
 
         toast({
           title: "Email & Crypto Sent!",
-          description: `${assetsText} transferred directly to ${to}. Transaction hash: ${result.messageId.slice(0, 10)}...`,
+          description: `${assetsText} transferred directly to ${toEmails.join(', ')}. Transaction hash: ${result.messageId.slice(0, 10)}...`,
         });
       } else if (cryptoEnabled && result.claimCode) {
         // Claim-based transfer for unregistered user
@@ -195,16 +209,19 @@ export function ComposeDialog({
           description: `Your message has been sent. Claim code: ${result.claimCode}. The recipient can use this code to claim their assets.`,
         });
       } else {
-        // Regular email without crypto
+        // Regular email without crypto - show recipient count for bulk sends
+        const recipientCount = normalizedRecipients.length;
         toast({
           title: "Email Sent!",
-          description: "Your message has been sent successfully.",
+          description: recipientCount > 1
+            ? `Your message has been sent to ${recipientCount} recipients successfully.`
+            : "Your message has been sent successfully.",
         });
       }
 
       setOpen(false);
       // Reset form
-      setTo('');
+      setToEmails([]);
       setSubject('');
       setBody('');
       setCryptoEnabled(false);
@@ -232,19 +249,13 @@ export function ComposeDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="to" className="text-right">
-              To
-            </Label>
-            <Input
-              id="to"
-              className="col-span-3"
+          <div className="grid gap-2">
+            <Label htmlFor="to">To</Label>
+            <EmailTagInput
+              emails={toEmails}
+              onChange={setToEmails}
               placeholder="recipient@example.com"
-              value={to}
-              onChange={(e) => {
-                const value = e.target.value.replace(/([^, ]+@dexmail\.app)/gi, match => match.toLowerCase());
-                setTo(value);
-              }}
+              disabled={isLoading}
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
@@ -281,7 +292,7 @@ export function ComposeDialog({
                 Attach Crypto Assets
               </label>
             </div>
-            {!isPlatformRecipient && to.length > 0 && (
+            {!isPlatformRecipient && toEmails.length > 0 && (
               <p className="text-xs text-amber-600 ml-6">
                 Crypto attachments are currently only available for @dexmail.app recipients.
                 <br />

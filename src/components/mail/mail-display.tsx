@@ -40,6 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import { mailService } from '@/lib/mail-service';
 import { useAuth } from '@/contexts/auth-context';
 import { Loader2 } from 'lucide-react';
+import { useSendUserOperation, useCurrentUser, useIsSignedIn } from '@coinbase/cdp-hooks';
 
 interface MailDisplayProps {
   mail: Mail | null;
@@ -161,11 +162,16 @@ function parseEmailThread(mail: Mail): ThreadMessage[] {
 
 export function MailDisplay({ mail, onBack, onNavigateToMail }: MailDisplayProps) {
   const isMobile = useIsMobile();
-  const { markAsRead, markAsUnread, moveToArchive, moveToSpam, moveToTrash, restoreFromTrash, getEmailStatus } = useMail();
+  const { markAsRead, markAsUnread, moveToArchive, moveToSpam, moveToTrash, restoreFromTrash, getEmailStatus, removeFromArchive } = useMail();
   const { toast } = useToast();
   const { user } = useAuth();
   const [replyBody, setReplyBody] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
+
+  // Coinbase CDP hooks for embedded wallet
+  const { sendUserOperation } = useSendUserOperation();
+  const { currentUser } = useCurrentUser();
+  const { isSignedIn } = useIsSignedIn();
 
   if (!mail) {
     return (
@@ -237,24 +243,57 @@ export function MailDisplay({ mail, onBack, onNavigateToMail }: MailDisplayProps
       return;
     }
 
+    // Check CDP authentication for embedded wallet users
+    if (user?.authType === 'coinbase-embedded' && !isSignedIn) {
+      toast({
+        title: "Session Expired",
+        description: "Your Coinbase session has expired. Please log in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSendingReply(true);
     try {
       const fullBody = `${replyBody}\n\nOn ${format(mailDate, "PPP p")}, ${mail.name} wrote:\n> ${cleanEmailBody(mail.body).replace(/\n/g, '\n> ')}`;
 
-      await mailService.sendEmail({
-        from: user.email,
-        to: [mail.email], // Reply to sender
-        subject: mail.subject.startsWith('Re:') ? mail.subject : `Re: ${mail.subject}`,
-        body: fullBody,
-        inReplyTo: mail.id
-      });
+      const sendTx = async (args: { to: string; data: string; value?: bigint }) => {
+        const smartAccount = currentUser?.evmSmartAccounts?.[0];
+        if (!smartAccount) {
+          throw new Error('Smart account not found');
+        }
+
+        const result = await sendUserOperation({
+          evmSmartAccount: smartAccount,
+          network: "base-sepolia",
+          calls: [{
+            to: args.to as `0x${string}`,
+            data: args.data as `0x${string}`,
+            value: args.value ?? BigInt(0),
+          }],
+          useCdpPaymaster: true
+        });
+        return result.userOperationHash;
+      };
+
+      await mailService.sendEmail(
+        {
+          from: user.email,
+          to: [mail.email],
+          subject: mail.subject.startsWith('Re:') ? mail.subject : `Re: ${mail.subject}`,
+          body: fullBody,
+          inReplyTo: mail.id
+        },
+        user?.authType,
+        user?.authType === 'coinbase-embedded' ? sendTx : undefined
+      );
 
       toast({
         title: "Reply Sent",
         description: "Your reply has been sent successfully."
       });
 
-      setReplyBody(''); // Clear textarea
+      setReplyBody('');
     } catch (error) {
       console.error('Failed to send reply:', error);
       toast({
@@ -296,6 +335,19 @@ export function MailDisplay({ mail, onBack, onNavigateToMail }: MailDisplayProps
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Restore from Trash</TooltipContent>
+              </Tooltip>
+            ) : emailStatus.archived ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={() => {
+                    removeFromArchive(mail.id);
+                    if (onBack) onBack();
+                  }}>
+                    <Reply className="h-4 w-4" />
+                    <span className="sr-only">Restore</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Restore from Archive</TooltipContent>
               </Tooltip>
             ) : (
               <>
