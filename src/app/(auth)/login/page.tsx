@@ -375,22 +375,22 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full">
+    <div className="flex flex-col lg:flex-row min-h-full gap-4 lg:gap-0">
 
 
       {/* Illustration - Top on mobile, Left on desktop */}
-      <div className="w-full lg:w-1/2 relative flex-shrink-0 lg:flex-shrink h-48 lg:h-auto">
+      <div className="w-full lg:w-1/2 relative flex-shrink-0 h-96 lg:h-[600px]">
         <Image
           src="/illustrations/login.svg"
           alt="Login to DexMail"
           fill
-          className="object-contain p-8"
+          className="object-contain p-1 lg:p-0"
           priority
         />
       </div>
 
       {/* Content */}
-      <div className='text-center space-y-4 lg:space-y-8 w-full lg:w-1/2 px-4 md:px-12 lg:px-24 py-4 lg:py-12 flex flex-col justify-center overflow-y-auto lg:overflow-visible'>
+      <div className='text-center space-y-4 lg:space-y-8 w-full lg:w-1/2 px-4 md:px-8 lg:px-12 py-4 lg:py-0 flex flex-col justify-center overflow-y-auto lg:overflow-visible'>
         <div className="space-y-8 ">
           <h1 className="text-2xl font-bold text-slate-900 leading-tight">
             Welcome Back
