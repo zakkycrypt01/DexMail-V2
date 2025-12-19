@@ -56,6 +56,17 @@ export default function LoginPage() {
   // Auto sign out from CDP when landing on login page (after logout)
   useEffect(() => {
     const autoSignOut = async () => {
+      // Always clear any persisted DexMail auth when visiting the login page
+      try {
+        authService.logout();
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+        }
+      } catch (err) {
+        console.error('[Login] Failed to clear local auth on mount:', err);
+      }
+
       if (isSignedIn) {
         try {
           console.log('[Login] Auto-signing out from previous CDP session');

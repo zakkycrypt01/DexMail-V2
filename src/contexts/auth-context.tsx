@@ -41,6 +41,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Check if user is already authenticated on mount
     const initAuth = async () => {
       try {
+        // If we're on auth pages, do not restore prior sessions
+        if (typeof window !== 'undefined') {
+          const path = window.location?.pathname || '';
+          if (path.startsWith('/login') || path.startsWith('/register')) {
+            console.log('[AuthContext] On auth page, ensuring clean auth state');
+            authService.logout();
+            setIsLoading(false);
+            return;
+          }
+        }
+
         if (authService.isAuthenticated()) {
           const userProfile = await authService.getProfile();
           setUser(userProfile);
