@@ -421,7 +421,30 @@ export default function RegisterPage() {
 
                     {/* Step 2: OTP verification (only show if OTP was sent but user not yet signed in) */}
                     {isOtpSent && !isSignedIn && (
-                      <div className="space-y-2 pt-2">
+                      <div className="space-y-3 pt-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 space-y-3 shadow-sm transition-all duration-300 hover:shadow-md">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">
+                              Code sent to
+                            </p>
+                            <p className="text-sm font-semibold text-slate-900 break-all">
+                              {embeddedEmail}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setIsOtpSent(false);
+                              setOtpCode('');
+                              setOtpFlowId(null);
+                              setError('');
+                            }}
+                            className="h-9 text-xs font-medium text-blue-700 hover:text-blue-900 hover:bg-blue-100 w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            ← Edit email address
+                          </Button>
+                        </div>
                         <Label htmlFor="embedded-otp" className="text-slate-700 font-medium">
                           Enter 6-digit code
                         </Label>
